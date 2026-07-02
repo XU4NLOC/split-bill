@@ -1,0 +1,57 @@
+:root {
+  --paper: #faf6ec;
+  --paper-dim: #f2ecdd;
+  --table: #d8cdb6;
+  --table-dark: #a99a7a;
+  --ink: #221d15;
+  --muted: #8c8371;
+  --rule: #d3c8ac;
+  --stamp: #b8432c;
+  --stamp-ink: #7a2e1f;
+  --settled: #4c7a5d;
+  --danger: #b8432c;
+
+  --font-display: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(
+      circle at 20% 10%,
+      var(--table) 0%,
+      var(--table-dark) 100%
+    )
+    fixed;
+  color: var(--ink);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
