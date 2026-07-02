@@ -1,4 +1,4 @@
-# Chia Bill — Split the Bill Calculator
+# Split the Bill Calculator (Just an entertaining project)
 
 Itemized bill splitting for a group dinner: mark who paid, list each item with
 its price, assign each item to the person who ordered it, and get back exactly
@@ -81,4 +81,3 @@ go test ./...
   intentionally left out of this version — the current model assumes one
   owner per item and a tax-free total.
 - Bills are one-time/in-memory only; nothing is persisted between sessions.
-# split-bill
