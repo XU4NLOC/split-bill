@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -229,7 +230,11 @@ func main() {
 	mux.HandleFunc("/api/split", withCORS(splitHandler))
 	mux.HandleFunc("/api/health", withCORS(healthHandler))
 
-	addr := ":8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
 	log.Printf("splitbill backend listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
