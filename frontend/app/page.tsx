@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 import { calculateSplit } from "@/lib/api";
+import { captureElement, copyImageToClipboard, downloadImage } from "@/lib/export";
 import { formatVND } from "@/lib/format";
 import type { Item, Person, SplitResponse } from "@/lib/types";
 
@@ -29,6 +30,9 @@ export default function Home() {
   const [results, setResults] = useState<SplitResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<"idle" | "copied" | "error">("idle");
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const runningTotal = useMemo(
     () => items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0),
@@ -155,6 +159,36 @@ export default function Home() {
       setLoading(false);
     }
   }
+
+  const handleDownload = useCallback(async () => {
+    if (!resultsRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const blob = await captureElement(resultsRef.current);
+      downloadImage(blob, "splitbill-result.png");
+    } catch {
+      setExportStatus("error");
+      setTimeout(() => setExportStatus("idle"), 2000);
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting]);
+
+  const handleCopy = useCallback(async () => {
+    if (!resultsRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const blob = await captureElement(resultsRef.current);
+      const ok = await copyImageToClipboard(blob);
+      setExportStatus(ok ? "copied" : "error");
+      setTimeout(() => setExportStatus("idle"), 2000);
+    } catch {
+      setExportStatus("error");
+      setTimeout(() => setExportStatus("idle"), 2000);
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting]);
 
   const payer = people.find((p) => p.isPayer);
   const namedPeople = people.filter((p) => p.name.trim() !== "");
@@ -327,7 +361,7 @@ export default function Home() {
           </section>
 
           {results && payer && (
-            <section className={styles.resultsSection}>
+            <section className={styles.resultsSection} ref={resultsRef}>
               <div className={styles.stamp}>
                 {formatVND(results.roundedTotal)}
                 <br />
@@ -376,6 +410,31 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+              )}
+
+              <div className={styles.exportRow}>
+                <button
+                  type="button"
+                  className={styles.exportBtn}
+                  onClick={handleDownload}
+                  disabled={exporting}
+                >
+                  {exporting ? "Exporting…" : "Download"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.exportBtn}
+                  onClick={handleCopy}
+                  disabled={exporting}
+                >
+                  {exporting ? "Exporting…" : "Copy"}
+                </button>
+              </div>
+              {exportStatus === "copied" && (
+                <div className={styles.exportToast}>Copied!</div>
+              )}
+              {exportStatus === "error" && (
+                <div className={styles.exportToastError}>Export failed</div>
               )}
             </section>
           )}
