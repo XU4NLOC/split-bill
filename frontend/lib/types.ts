@@ -22,8 +22,10 @@ export interface PersonResult {
   name: string;
   isPayer: boolean;
   subtotal: number;
+  roundedSubtotal: number;
   itemCount: number;
   owes: number;
+  roundedOwes: number;
 }
 
 export interface Settlement {
@@ -36,6 +38,7 @@ export interface Settlement {
 
 export interface SplitResponse {
   total: number;
+  roundedTotal: number;
   perPerson: PersonResult[];
   settlements: Settlement[];
 }

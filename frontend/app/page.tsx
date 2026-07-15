@@ -248,10 +248,11 @@ export default function Home() {
                         type="number"
                         min={1}
                         step={1}
-                        value={it.quantity || ""}
-                        onChange={(e) =>
-                          updateItem(it.id, { quantity: Number(e.target.value) })
-                        }
+                        value={it.quantity}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          updateItem(it.id, { quantity: isNaN(v) ? 1 : v });
+                        }}
                       />
                       <span className={styles.itemLabel}>Total</span>
                       <input
@@ -259,10 +260,11 @@ export default function Home() {
                         type="number"
                         min={0}
                         step={1000}
-                        value={it.totalPrice || ""}
-                        onChange={(e) =>
-                          updateItem(it.id, { totalPrice: Number(e.target.value) })
-                        }
+                        value={it.totalPrice}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          updateItem(it.id, { totalPrice: isNaN(v) ? 0 : v });
+                        }}
                       />
                     </div>
                     {namedPeople.length > 0 && (
@@ -281,9 +283,10 @@ export default function Home() {
                                 max={it.quantity}
                                 step={1}
                                 value={assignment?.quantity ?? 0}
-                                onChange={(e) =>
-                                  updateAssignment(it.id, p.id, Number(e.target.value))
-                                }
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value, 10);
+                                  updateAssignment(it.id, p.id, isNaN(v) ? 0 : v);
+                                }}
                               />
                             </div>
                           );
@@ -326,7 +329,7 @@ export default function Home() {
           {results && payer && (
             <section className={styles.resultsSection}>
               <div className={styles.stamp}>
-                {formatVND(results.total)}
+                {formatVND(results.roundedTotal)}
                 <br />
                 paid by {payer.name}
               </div>
@@ -343,7 +346,7 @@ export default function Home() {
                     </span>
                     <span className={styles.leaderFill} />
                     <span className={styles.leaderAmount}>
-                      {formatVND(pr.subtotal)}
+                      {formatVND(pr.roundedSubtotal)}
                     </span>
                   </div>
                 ))}

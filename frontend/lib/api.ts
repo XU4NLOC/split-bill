@@ -1,6 +1,8 @@
 import type { Person, Item, SplitResponse, ApiError } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://split-bill-p5tn.onrender.com";
+//const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
 
 export async function calculateSplit(
   people: Person[],
