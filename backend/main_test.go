@@ -29,11 +29,13 @@ func TestCalculateSplit_Basic(t *testing.T) {
 	if resp.Total != 10000 {
 		t.Errorf("expected total 10000, got %v", resp.Total)
 	}
+	if resp.RoundedTotal != 10000 {
+		t.Errorf("expected roundedTotal 10000, got %v", resp.RoundedTotal)
+	}
 	if len(resp.PerPerson) != 2 {
 		t.Fatalf("expected 2 perPerson results, got %d", len(resp.PerPerson))
 	}
 
-	// An (payer): 3/5 * 10000 = 6000, owes 0
 	an := resp.PerPerson[0]
 	if an.Subtotal != 6000 {
 		t.Errorf("expected An subtotal 6000, got %v", an.Subtotal)
@@ -42,7 +44,6 @@ func TestCalculateSplit_Basic(t *testing.T) {
 		t.Errorf("expected An owes 0 (payer), got %v", an.Owes)
 	}
 
-	// Binh: 2/5 * 10000 = 4000, owes 4000
 	binh := resp.PerPerson[1]
 	if binh.Subtotal != 4000 {
 		t.Errorf("expected Binh subtotal 4000, got %v", binh.Subtotal)
@@ -60,6 +61,163 @@ func TestCalculateSplit_Basic(t *testing.T) {
 	}
 	if s.Amount != 4000 {
 		t.Errorf("expected settlement amount 4000, got %v", s.Amount)
+	}
+}
+
+func TestCalculateSplit_RoundingPayerDownNonPayerUp(t *testing.T) {
+	// 3 people, 100000 VND total, each buys 1 of 3 items
+	// Exact share: 33333.33 each
+	// Payer (An): floor(33333.33) = 33000
+	// Leftover: 100000 - 33000 = 67000
+	// 2 non-payers: 67000 / 2 = 33500 each → base = 33000, remainder = 1000
+	// Last non-payer gets +1000 → 34000
+	// Total: 33000 + 33000 + 34000 = 100000 ✓
+	req := SplitRequest{
+		People: []Person{
+			{ID: "p1", Name: "An", IsPayer: true},
+			{ID: "p2", Name: "Binh"},
+			{ID: "p3", Name: "Chi"},
+		},
+		Items: []Item{
+			{
+				ID:         "i1",
+				Name:       "Pho",
+				Quantity:   3,
+				TotalPrice: 100000,
+				Assignments: []Assignment{
+					{PersonID: "p1", Quantity: 1},
+					{PersonID: "p2", Quantity: 1},
+					{PersonID: "p3", Quantity: 1},
+				},
+			},
+		},
+	}
+
+	resp, err := calculateSplit(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	an := resp.PerPerson[0]
+	if an.RoundedOwes != 33000 {
+		t.Errorf("expected An (payer) rounded 33000, got %v", an.RoundedOwes)
+	}
+
+	binh := resp.PerPerson[1]
+	if binh.RoundedOwes != 33000 {
+		t.Errorf("expected Binh (non-payer) rounded 33000, got %v", binh.RoundedOwes)
+	}
+
+	chi := resp.PerPerson[2]
+	if chi.RoundedOwes != 34000 {
+		t.Errorf("expected Chi (non-payer) rounded 34000, got %v", chi.RoundedOwes)
+	}
+
+	// Total must match exactly
+	if resp.RoundedTotal != 100000 {
+		t.Errorf("expected roundedTotal 100000, got %v", resp.RoundedTotal)
+	}
+
+	// Settlement amounts
+	if len(resp.Settlements) != 2 {
+		t.Fatalf("expected 2 settlements, got %d", len(resp.Settlements))
+	}
+	amounts := map[string]float64{}
+	for _, s := range resp.Settlements {
+		amounts[s.FromName] = s.Amount
+	}
+	if amounts["Binh"] != 33000 {
+		t.Errorf("expected Binh settlement 33000, got %v", amounts["Binh"])
+	}
+	if amounts["Chi"] != 34000 {
+		t.Errorf("expected Chi settlement 34000, got %v", amounts["Chi"])
+	}
+}
+
+func TestCalculateSplit_EvenSplit(t *testing.T) {
+	// 2 people, 10000 VND, 1 item each
+	// Exact: 5000 each
+	// Payer: floor(5000) = 5000
+	// Leftover: 10000 - 5000 = 5000
+	// 1 non-payer: base = 5000, no remainder
+	// Total: 5000 + 5000 = 10000 ✓
+	req := SplitRequest{
+		People: []Person{
+			{ID: "p1", Name: "An", IsPayer: true},
+			{ID: "p2", Name: "Binh"},
+		},
+		Items: []Item{
+			{
+				ID:         "i1",
+				Name:       "Che",
+				Quantity:   2,
+				TotalPrice: 10000,
+				Assignments: []Assignment{
+					{PersonID: "p1", Quantity: 1},
+					{PersonID: "p2", Quantity: 1},
+				},
+			},
+		},
+	}
+
+	resp, err := calculateSplit(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resp.PerPerson[0].RoundedOwes != 5000 {
+		t.Errorf("expected payer rounded 5000, got %v", resp.PerPerson[0].RoundedOwes)
+	}
+	if resp.PerPerson[1].RoundedOwes != 5000 {
+		t.Errorf("expected non-payer rounded 5000, got %v", resp.PerPerson[1].RoundedOwes)
+	}
+	if resp.RoundedTotal != 10000 {
+		t.Errorf("expected roundedTotal 10000, got %v", resp.RoundedTotal)
+	}
+}
+
+func TestCalculateSplit_FourPeople(t *testing.T) {
+	// 4 people, 100000 VND total
+	// Exact: 25000 each
+	// Payer: floor(25000) = 25000
+	// Leftover: 100000 - 25000 = 75000
+	// 3 non-payers: 75000 / 3 = 25000 each → no remainder
+	// Total: 25000 + 25000*3 = 100000 ✓
+	req := SplitRequest{
+		People: []Person{
+			{ID: "p1", Name: "An", IsPayer: true},
+			{ID: "p2", Name: "Binh"},
+			{ID: "p3", Name: "Chi"},
+			{ID: "p4", Name: "Dung"},
+		},
+		Items: []Item{
+			{
+				ID:         "i1",
+				Name:       "Pho",
+				Quantity:   4,
+				TotalPrice: 100000,
+				Assignments: []Assignment{
+					{PersonID: "p1", Quantity: 1},
+					{PersonID: "p2", Quantity: 1},
+					{PersonID: "p3", Quantity: 1},
+					{PersonID: "p4", Quantity: 1},
+				},
+			},
+		},
+	}
+
+	resp, err := calculateSplit(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, pr := range resp.PerPerson {
+		if pr.RoundedOwes != 25000 {
+			t.Errorf("expected %s rounded 25000, got %v", pr.Name, pr.RoundedOwes)
+		}
+	}
+	if resp.RoundedTotal != 100000 {
+		t.Errorf("expected roundedTotal 100000, got %v", resp.RoundedTotal)
 	}
 }
 
@@ -102,19 +260,16 @@ func TestCalculateSplit_MultipleItems(t *testing.T) {
 		t.Errorf("expected total 190000, got %v", resp.Total)
 	}
 
-	// An: Pho 50000 + Che 40000 = 90000, owes 0 (payer)
 	an := resp.PerPerson[0]
 	if an.Subtotal != 90000 {
 		t.Errorf("expected An subtotal 90000, got %v", an.Subtotal)
 	}
 
-	// Binh: Pho 50000 = 50000, owes 50000
 	binh := resp.PerPerson[1]
 	if binh.Owes != 50000 {
 		t.Errorf("expected Binh owes 50000, got %v", binh.Owes)
 	}
 
-	// Chi: Pho 50000 = 50000, owes 50000
 	chi := resp.PerPerson[2]
 	if chi.Owes != 50000 {
 		t.Errorf("expected Chi owes 50000, got %v", chi.Owes)

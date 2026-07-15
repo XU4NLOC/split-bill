@@ -24,10 +24,10 @@ type Assignment struct {
 }
 
 type Item struct {
-	ID         string       `json:"id"`
-	Name       string       `json:"name"`
-	Quantity   int          `json:"quantity"`
-	TotalPrice float64      `json:"totalPrice"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Quantity    int          `json:"quantity"`
+	TotalPrice  float64      `json:"totalPrice"`
 	Assignments []Assignment `json:"assignments"`
 }
 
@@ -37,12 +37,14 @@ type SplitRequest struct {
 }
 
 type PersonResult struct {
-	PersonID  string  `json:"personId"`
-	Name      string  `json:"name"`
-	IsPayer   bool    `json:"isPayer"`
-	Subtotal  float64 `json:"subtotal"`
-	ItemCount int     `json:"itemCount"`
-	Owes      float64 `json:"owes"`
+	PersonID        string  `json:"personId"`
+	Name            string  `json:"name"`
+	IsPayer         bool    `json:"isPayer"`
+	Subtotal        float64 `json:"subtotal"`
+	RoundedSubtotal float64 `json:"roundedSubtotal"`
+	ItemCount       int     `json:"itemCount"`
+	Owes            float64 `json:"owes"`
+	RoundedOwes     float64 `json:"roundedOwes"`
 }
 
 type Settlement struct {
@@ -54,9 +56,10 @@ type Settlement struct {
 }
 
 type SplitResponse struct {
-	Total       float64        `json:"total"`
-	PerPerson   []PersonResult `json:"perPerson"`
-	Settlements []Settlement   `json:"settlements"`
+	Total        float64        `json:"total"`
+	RoundedTotal float64        `json:"roundedTotal"`
+	PerPerson    []PersonResult `json:"perPerson"`
+	Settlements  []Settlement   `json:"settlements"`
 }
 
 type ErrorResponse struct {
@@ -154,40 +157,93 @@ func calculateSplit(req SplitRequest) (*SplitResponse, error) {
 	settlements := make([]Settlement, 0, len(req.People)-1)
 	payer := peopleByID[payerID]
 
+	// 1. Payer always rounds DOWN (floors to 1000)
+	payerExact := costs[payerID]
+	payerAmount := floorTo1000(payerExact)
+
+	// 2. Leftover is what non-payers must cover
+	leftover := total - payerAmount
+
+	// 3. Collect non-payers and split leftover equally
+	type npInfo struct {
+		person Person
+		exact  float64
+	}
+	nonPayers := make([]npInfo, 0, len(req.People)-1)
 	for _, p := range req.People {
-		subtotal := round2(costs[p.ID])
-		owes := 0.0
 		if !p.IsPayer {
+			nonPayers = append(nonPayers, npInfo{person: p, exact: costs[p.ID]})
+		}
+	}
+
+	roundedAmounts := map[string]float64{}
+	if len(nonPayers) > 0 {
+		base := math.Floor(leftover/float64(len(nonPayers))/1000) * 1000
+		remainder := leftover - base*float64(len(nonPayers))
+		extraCount := int(remainder / 1000)
+		for i := len(nonPayers) - 1; i >= 0 && extraCount > 0; i-- {
+			roundedAmounts[nonPayers[i].person.ID] = base + 1000
+			extraCount--
+		}
+		for i := 0; i < len(nonPayers); i++ {
+			if _, ok := roundedAmounts[nonPayers[i].person.ID]; !ok {
+				roundedAmounts[nonPayers[i].person.ID] = base
+			}
+		}
+	}
+
+	// 4. Build results
+	for _, p := range req.People {
+		subtotal := costs[p.ID]
+		owes := 0.0
+		roundedOwes := 0.0
+		if p.IsPayer {
+			roundedOwes = payerAmount
+		} else {
 			owes = subtotal
+			roundedOwes = roundedAmounts[p.ID]
 		}
 		perPerson = append(perPerson, PersonResult{
-			PersonID:  p.ID,
-			Name:      p.Name,
-			IsPayer:   p.IsPayer,
-			Subtotal:  subtotal,
-			ItemCount: counts[p.ID],
-			Owes:      owes,
+			PersonID:        p.ID,
+			Name:            p.Name,
+			IsPayer:         p.IsPayer,
+			Subtotal:        subtotal,
+			RoundedSubtotal: roundedOwes,
+			ItemCount:       counts[p.ID],
+			Owes:            owes,
+			RoundedOwes:     roundedOwes,
 		})
-		if !p.IsPayer && owes > 0 {
+		if !p.IsPayer && roundedOwes > 0 {
 			settlements = append(settlements, Settlement{
 				FromID:   p.ID,
 				FromName: p.Name,
 				ToID:     payer.ID,
 				ToName:   payer.Name,
-				Amount:   owes,
+				Amount:   roundedOwes,
 			})
 		}
 	}
 
+	// 5. Compute rounded total as sum of all rounded amounts
+	roundedTotal := payerAmount
+	for _, np := range nonPayers {
+		roundedTotal += roundedAmounts[np.person.ID]
+	}
+
 	return &SplitResponse{
-		Total:       round2(total),
-		PerPerson:   perPerson,
-		Settlements: settlements,
+		Total:        total,
+		RoundedTotal: roundedTotal,
+		PerPerson:    perPerson,
+		Settlements:  settlements,
 	}, nil
 }
 
-func round2(v float64) float64 {
-	return math.Round(v*100) / 100
+func floorTo1000(v float64) float64 {
+	return math.Floor(v/1000) * 1000
+}
+
+func ceilTo1000(v float64) float64 {
+	return math.Ceil(v/1000) * 1000
 }
 
 // ---------- Helpers ----------
